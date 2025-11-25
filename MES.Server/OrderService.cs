@@ -15,11 +15,14 @@ public class OrderService
         const string workOrderDevice = "D315";
         const string completionSignal = "M311";
 
-        // 1. PLC 신호 확인 (M310): 주문 요청 신호가 ON인지 확인
+        // 0. PLC 신호 확인 (M310): 주문 요청 신호가 ON인지 확인
         if (_plc.ReadDevice(orderSignal) != 1)
         {
             return;
         }
+
+        // 1. 완료 신호(M311)를 OFF로 초기화.
+        _plc.WriteDevice(completionSignal, 0);
 
         // 2. D310에서 주문 수량 읽기
         int requestQty = _plc.ReadDevice(requestQuantityDevice);
@@ -79,6 +82,24 @@ public class OrderService
             Log.Error(ex, "주문 DB 저장 중 오류가 발생했습니다. RequestQty={RequestQty}", requestQty);
             throw;
         }
+    }
+
+    public void CreateWebOrder(int requestQty)
+    {
+        const string orderSignal = "M310";
+        const string requestQuantityDevice = "D300";
+        const string completionSignal = "M311";
+
+        // 0. 완료 신호(M311)를 OFF로 초기화.
+        _plc.WriteDevice(completionSignal, 0);
+
+        // 1. D310에 주문 수량 쓰기
+        _plc.WriteDevice(requestQuantityDevice, requestQty);
+
+        // 2. M310을 ON하여 PLC에 주문 요청
+        _plc.WriteDevice(orderSignal, 1);
+
+        Log.Information("웹 주문 요청을 PLC에 전달했습니다. 수량={RequestQty}", requestQty);
     }
 
     /// <summary>
