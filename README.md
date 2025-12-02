@@ -21,9 +21,17 @@ C# ASP.NET Core와 Mitsubishi PLC를 활용한 자동차 제조 전공정(Front-
     - [사전 요구사항](#사전-요구사항)
     - [설치 및 실행](#설치-및-실행)
   - [6. 데이터베이스](#6-데이터베이스)
-    - [1. 주문 (Orders)](#1-주문-orders)
-    - [2. 생산 (Production)](#2-생산-production)
-  - [7. 프로젝트 팀 구성 및 역할](#7-프로젝트-팀-구성-및-역할)
+    - [테이블 이원화 전략 (`_history` 테이블)](#테이블-이원화-전략-_history-테이블)
+    - [1. `order` (주문 관리)](#1-order-주문-관리)
+    - [2. `order_history` (주문 관리) \[백업\]](#2-order_history-주문-관리-백업)
+    - [3. `production` (생산 관리)](#3-production-생산-관리)
+    - [4. `production_history` (생산 관리) \[백업\]](#4-production_history-생산-관리-백업)
+    - [5. `vision_upper` (상부 비전 카메라)](#5-vision_upper-상부-비전-카메라)
+    - [6. `vision_lower` (하부 비전 카메라)](#6-vision_lower-하부-비전-카메라)
+  - [7. PLC 입출력 맵](#7-plc-입출력-맵)
+    - [입력 (X)](#입력-x)
+    - [출력 (Y)](#출력-y)
+  - [8. 프로젝트 팀 구성 및 역할](#8-프로젝트-팀-구성-및-역할)
     - [나의 프로젝트 기여도](#나의-프로젝트-기여도)
 
 ## 1. 프로젝트 소개
@@ -55,7 +63,7 @@ C# ASP.NET Core와 Mitsubishi PLC를 활용한 자동차 제조 전공정(Front-
 
 본 프로젝트는 2대의 PC를 기반으로 구성됩니다. 메인 서버 PC에서는 MES 서버가 동작하며,
 클라이언트 PC에서는 비전 카메라, Dobot 로봇 제어 프로그램 및 WPF 클라이언트가 실행됩니다.
-두 PC는 동일한 공유기 네트워크에 연결되어 TCP/IP 프로토콜로 통신합니다.
+서버와 클라이언트 PC는 동일한 공유기 네트워크에 연결되어 통신합니다.
 
 ```mermaid
 graph TD
@@ -77,23 +85,22 @@ graph TD
 
     WPF <-->|"TCP/IP"| Server
     Vision <-->|"TCP/IP"| Server
-    Dobot <-->|"TCP/IP"| Server
     
     Server <-->|"Query/Save"| DB
     Server <-->|"PlcConnector"| MX
     MX <-->|"PLC Communication"| PLC
+    Dobot <-->|"pymcprotocol"| PLC
 ```
 
 ### 주요 구성 요소
 
-1.  **PLC 제어 (`PlcConnector`)**
-    *   **MX Component**를 미들웨어로 사용하여 Mitsubishi PLC와 통신합니다.
-    *   설비 데이터를 주기적으로 Polling(읽기)하거나 제어 명령(쓰기)을 수행합니다.
+1.  **PLC-연계 제어**
+    *   **MES Server**: **MX Component**를 미들웨어로 사용하여 Mitsubishi PLC와 통신합니다. 설비 데이터를 주기적으로 Polling(읽기)하거나 제어 명령(쓰기)을 수행합니다.
+    *   **Dobot Client**: **pymcprotocol** 라이브러리를 통해 PLC와 직접 통신합니다. PLC로부터 작업 신호(조립, 불량품 이송 등)를 수신하여 로봇 동작을 수행하고, 완료 신호를 PLC에 다시 전송합니다.
 
-2.  **외부 클라이언트 통신 (TCP/IP)**
-    *   **Vision Client**: 검사 명령을 수신하고, 카메라로 판독한 제품(자동차 바퀴)의 불량 여부를 서버로 전송합니다.
-    *   **Dobot Client**: 서버로부터 조립 명령을 받아 로봇을 제어하고, 동작 상태를 실시간으로 보고합니다.
-    *   **WPF Client**: 작업자를 위한 HMI 대시보드로, 생산 현황 모니터링 및 공정 관리 기능을 제공합니다.
+2.  **서버-클라이언트 통신 (TCP/IP)**
+    *   **Vision Client**: 서버로부터 검사 명령을 수신하고, 카메라로 판독한 제품의 도색 불량 여부를 서버로 전송합니다.
+    *   **WPF Client**: 작업자를 위한 HMI 대시보드로, 생산 현황 모니터링 및 공정 관리 기능을 제공하기 위해 서버와 통신합니다.
 
 3.  **데이터 관리 및 로깅**
     *   **OrderService**: 수집된 데이터를 비즈니스 로직에 맞춰 가공합니다.
@@ -146,23 +153,127 @@ graph TD
 
 데이터베이스의 모든 테이블 컬럼은 `NOT NULL` 제약조건을 가집니다.
 
-### 1. 주문 (Orders)
-고객의 주문 정보를 관리합니다.
+### 테이블 이원화 전략 (`_history` 테이블)
 
-| 컬럼명 | 데이터 타입 | 제약조건 | 설명 |
+본 시스템의 데이터베이스는 `order`와 `production` 테이블, 그리고 각각에 대응하는 `order_history`와 `production_history` 테이블로 구성된 이원화 구조를 가집니다.
+
+이러한 설계는 **CIMON SCADA 시스템의 태그(Tag) 구조적 한계**를 극복하고 성능을 최적화하기 위해 도입되었습니다. SCADA는 미리 생성된 정적 태그를 사용하므로, 데이터가 계속 누적되는 테이블을 직접 연동할 경우 성능 저하가 발생할 수 있습니다.
+
+- **운영 테이블 (`order`, `production`):** 현재 진행 중인 최신 데이터 30개만 유지하며, SCADA 시스템이 이 테이블을 참조하여 항상 가벼운 상태를 유지합니다.
+- **기록 테이블 (`_history`):** 운영 테이블의 데이터가 30개를 초과하거나 완료되면, 해당 데이터는 `_history` 테이블로 이전되어 영구 보존됩니다.
+
+이 구조를 통해 **실시간 모니터링의 효율성**과 **데이터의 영구적 보존**이라는 두 가지 목표를 동시에 달성합니다.
+
+### 1. `order` (주문 관리)
+
+| 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
 |---|---|---|---|
-| `주문ID` | `INT` | `Primary Key` | 주문 고유 식별자 |
-| `주문수량` | `INT` | | 주문된 제품의 총 수량 |
+| `order_id` | 주문 ID | `INT(11)` | `Primary Key` |
+| `model_code` | 모델명 | `VARCHAR(50)` | |
+| `order_quantity`| 주문 수량 | `INT(11)` | |
+| `order_date` | 주문 날짜 | `DATETIME` | |
+| `order_status` | 주문 상태 | `VARCHAR(50)` | |
 
-### 2. 생산 (Production)
-실제 생산 공정의 정보를 관리합니다.
+### 2. `order_history` (주문 관리) [백업]
 
-| 컬럼명 | 데이터 타입 | 제약조건 | 설명 |
+| 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
 |---|---|---|---|
-| `생산코드` | `INT` | `Primary Key` | 생산 작업 고유 식별자 |
-| `생산수량` | `INT` | | 현재까지 생산된 제품의 수량 |
+| `backup_id` | 백업 ID | `INT(11)` | `Primary Key` |
+| `order_id` | 주문 ID | `INT(11)` | |
+| `model_code` | 모델명 | `VARCHAR(50)` | |
+| `order_quantity`| 주문 수량 | `INT(11)` | |
+| `order_date` | 주문 날짜 | `DATETIME` | |
+| `order_status` | 주문 상태 | `VARCHAR(50)` | |
+| `backed_date` | 백업 날짜 | `DATETIME` | |
 
-## 7. 프로젝트 팀 구성 및 역할
+### 3. `production` (생산 관리)
+
+| 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
+|---|---|---|---|
+| `production_id` | 생산 ID | `INT(11)` | `Primary Key` |
+| `model_code` | 모델명 | `VARCHAR(50)` | |
+| `upper_quantity`| 상부 생산 수량 | `INT(11)` | |
+| `lower_quantity`| 하부 생산 수량 | `INT(11)` | |
+| `good_quantity` | 양품 수량 | `INT(11)` | |
+| `bad_quantity` | 불량 수량 | `INT(11)` | |
+| `start_date` | 생산 시작 날짜 | `DATETIME` | |
+| `end_date` | 생산 종료 날짜 | `DATETIME` | |
+
+### 4. `production_history` (생산 관리) [백업]
+
+| 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
+|---|---|---|---|
+| `backup_id` | 백업 ID | `INT(11)` | `Primary Key` |
+| `production_id` | 생산 ID | `INT(11)` | |
+| `model_code` | 모델명 | `VARCHAR(50)` | |
+| `upper_quantity`| 상부 생산 수량 | `INT(11)` | |
+| `lower_quantity`| 하부 생산 수량 | `INT(11)` | |
+| `good_quantity` | 양품 수량 | `INT(11)` | |
+| `bad_quantity` | 불량 수량 | `INT(11)` | |
+| `start_date` | 생산 시작 날짜 | `DATETIME` | |
+| `end_date` | 생산 종료 날짜 | `DATETIME` | |
+| `backed_date` | 백업 날짜 | `DATETIME` | |
+
+### 5. `vision_upper` (상부 비전 카메라)
+
+| 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
+|---|---|---|---|
+| `vision_id` | 비전 ID | `INT(11)` | `Primary Key` |
+| `production_id` | 생산 ID | `INT(11)` | |
+| `model_code` | 모델명 | `VARCHAR(50)` | |
+| `result` | 결과 | `VARCHAR(50)` | |
+| `measured_at` | 측정 시각 | `DATETIME` | |
+
+### 6. `vision_lower` (하부 비전 카메라)
+
+| 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
+|---|---|---|---|
+| `vision_id` | 비전 ID | `INT(11)` | `Primary Key` |
+| `production_id` | 생산 ID | `INT(11)` | |
+| `model_code` | 모델명 | `VARCHAR(50)` | |
+| `result` | 결과 | `VARCHAR(50)` | |
+| `measured_at` | 측정 시각 | `DATETIME` | |
+
+## 7. PLC 입출력 맵
+
+### 입력 (X)
+
+| 접점 | 설명 |
+|---|---|
+| X0 | 하부공급감지센서 |
+| X1 | 하부비전감지센서 |
+| X2 | 하부로봇감지센서 |
+| X3 | 하부종단센서 |
+| X4 | 상부공급감지센서 |
+| X5 | 상부로봇감지센서 |
+| X6 | 상부비전감지센서 |
+| X7 | 상부종단센서 |
+| X10 | 상부공급실린더 전진센서 |
+| X11 | 상부공급실린더 후진센서 |
+| X12 | 하부배출실린더 전진센서 |
+| X13 | 하부배출실린더 후진센서 |
+| X14 | 하부공급실린더 전진센서 |
+| X15 | 하부공급실린더 후진센서 |
+| X40 | 자동모드 스위치 |
+| X41 | 비상정지 B접점 |
+
+### 출력 (Y)
+
+| 접점 | 설명 |
+|---|---|
+| Y30 | 하부1차 컨베이어 출력 |
+| Y31 | 하부2차 컨베이어 출력 |
+| Y32 | 상부1차 컨베이어 출력 |
+| Y33 | 상부2차 컨베이어 출력 |
+| Y34 | 하부공급실린더 출력 |
+| Y35 | 하부배출실린더 출력 |
+| Y36 | 상부공급실린더 출력 |
+| Y50 | PLC전원램프(하얀색) |
+| Y51 | 작업동작램프(초록색) |
+| Y52 | 수동동작램프(노랑색) |
+| Y53 | 비상정지램프(빨간색) |
+
+## 8. 프로젝트 팀 구성 및 역할
 
 총 5명의 팀원이 각자의 강점을 살려 하드웨어 설계부터 소프트웨어 개발까지 역할을 분담했습니다.
 

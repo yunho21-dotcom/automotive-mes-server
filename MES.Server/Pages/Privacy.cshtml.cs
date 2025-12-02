@@ -1,7 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
-
-namespace MES.Server.Pages
+﻿namespace MES.Server.Pages
 {
     public class PrivacyModel : PageModel
     {

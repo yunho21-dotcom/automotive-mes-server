@@ -37,6 +37,24 @@ public class OrderService
         _plc.WriteDevice(completionSignal, 1);
     }
 
+    public void CreateWebOrder(int requestQty)
+    {
+        const string orderSignal = "M310";
+        const string requestQuantityDevice = "D300";
+        const string completionSignal = "M311";
+
+        // 0. 완료 신호(M311)를 OFF로 초기화.
+        _plc.WriteDevice(completionSignal, 0);
+
+        // 1. D310에 주문 수량 쓰기
+        _plc.WriteDevice(requestQuantityDevice, requestQty);
+
+        // 2. M310을 ON하여 PLC에 주문 요청
+        _plc.WriteDevice(orderSignal, 1);
+
+        Log.Information("웹 주문 요청을 PLC에 전달했습니다. 수량={RequestQty}", requestQty);
+    }
+
     /// <summary>
     /// MySQL 데이터베이스(cimon.주문1)에 주문 수량을 저장한다.
     /// 주문ID는 DDNN 형식으로 생성한다. (DD: 일자 01~31, NN: 해당 일자의 순번 01부터 시작)
@@ -82,24 +100,6 @@ public class OrderService
             Log.Error(ex, "주문 DB 저장 중 오류가 발생했습니다. RequestQty={RequestQty}", requestQty);
             throw;
         }
-    }
-
-    public void CreateWebOrder(int requestQty)
-    {
-        const string orderSignal = "M310";
-        const string requestQuantityDevice = "D300";
-        const string completionSignal = "M311";
-
-        // 0. 완료 신호(M311)를 OFF로 초기화.
-        _plc.WriteDevice(completionSignal, 0);
-
-        // 1. D310에 주문 수량 쓰기
-        _plc.WriteDevice(requestQuantityDevice, requestQty);
-
-        // 2. M310을 ON하여 PLC에 주문 요청
-        _plc.WriteDevice(orderSignal, 1);
-
-        Log.Information("웹 주문 요청을 PLC에 전달했습니다. 수량={RequestQty}", requestQty);
     }
 
     /// <summary>
