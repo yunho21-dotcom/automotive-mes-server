@@ -1,11 +1,11 @@
 @page
 @model OrderModel
 @{
-    ViewData["Title"] = "주문 페이지";
+    ViewData["Title"] = "MES 주문관리";
 }
 
 <div class="text-center">
-    <h1 class="display-4">주문하기</h1>
+    <h1 class="display-4">자동차 주문</h1>
 </div>
 
 <div class="row">
@@ -20,7 +20,17 @@
             <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
 
             <div class="form-group mb-3">
-                <label asp-for="RequestQty" class="form-label">주문 수량</label>
+                <label asp-for="ModelCode" class="form-label">차량 모델명</label>
+                <select asp-for="ModelCode" class="form-select">
+                    <option value="KIA_CARNIVAL">KIA_CARNIVAL</option>
+                    <option value="KIA_SORENTO">KIA_SORENTO</option>
+                    <option value="KIA_SPORTAGE">KIA_SPORTAGE</option>
+                </select>
+                <span asp-validation-for="ModelCode" class="text-danger"></span>
+            </div>
+
+            <div class="form-group mb-3">
+                <label asp-for="RequestQty" class="form-label">차량 주문 수량</label>
                 <input asp-for="RequestQty" class="form-control" type="number" min="1" />
                 <span asp-validation-for="RequestQty" class="text-danger"></span>
             </div>

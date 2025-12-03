@@ -1,4 +1,4 @@
-public class OrderService
+﻿public class OrderService
 {
     private readonly PlcConnector _plc;
 
@@ -7,113 +7,131 @@ public class OrderService
         _plc = plc;
     }
 
-    // PLC 흐름에 따라 주문을 처리한다.
-    public void ProcessPlcOrder()
+    /// <summary>
+    /// 웹 주문을 생성하고, 설비가 정지(M101 = 0) 상태일 때만 PLC로 전송한다.
+    /// 설비가 동작 중이거나, 기타 오류가 있을 경우 false 를 반환하고 errorMessage 에 사유를 전달한다.
+    /// </summary>
+    /// <param name="modelCode">모델 코드 (KIA_CARNIVAL, KIA_SORENTO, KIA_SPORTAGE)</param>
+    /// <param name="orderQuantity">주문 수량</param>
+    /// <param name="errorMessage">오류 발생 시 사용자에게 표시할 메시지</param>
+    /// <returns>성공 여부</returns>
+    public bool CreateWebOrder(string modelCode, int orderQuantity, out string? errorMessage)
     {
-        const string orderSignal = "M310";
-        const string requestQuantityDevice = "D310";
-        const string workOrderDevice = "D315";
-        const string completionSignal = "M311";
+        errorMessage = null;
 
-        // 0. PLC 신호 확인 (M310): 주문 요청 신호가 ON인지 확인
-        if (_plc.ReadDevice(orderSignal) != 1)
+        if (orderQuantity <= 0)
         {
-            return;
+            errorMessage = "주문 수량은 1 이상이어야 합니다.";
+            return false;
         }
 
-        // 1. 완료 신호(M311)를 OFF로 초기화.
-        _plc.WriteDevice(completionSignal, 0);
+        if (!IsSupportedModel(modelCode))
+        {
+            errorMessage = "지원하지 않는 모델입니다.";
+            return false;
+        }
 
-        // 2. D310에서 주문 수량 읽기
-        int requestQty = _plc.ReadDevice(requestQuantityDevice);
+        const string machineStatusDevice = "M101";
 
-        // 3. DB 처리: MySQL(cimon.주문1)에 주문 정보 저장
-        SaveOrderToDatabase(requestQty);
-
-        // 4. D315에 작업 지시 수량 쓰기 (확정)
-        _plc.WriteDevice(workOrderDevice, requestQty);
-
-        // 5. PLC에 "주문 처리 완료" 신호 주기 (M311 ON)
-        _plc.WriteDevice(completionSignal, 1);
-    }
-
-    public void CreateWebOrder(int requestQty)
-    {
-        const string orderSignal = "M310";
-        const string requestQuantityDevice = "D300";
-        const string completionSignal = "M311";
-
-        // 0. 완료 신호(M311)를 OFF로 초기화.
-        _plc.WriteDevice(completionSignal, 0);
-
-        // 1. D310에 주문 수량 쓰기
-        _plc.WriteDevice(requestQuantityDevice, requestQty);
-
-        // 2. M310을 ON하여 PLC에 주문 요청
-        _plc.WriteDevice(orderSignal, 1);
-
-        Log.Information("웹 주문 요청을 PLC에 전달했습니다. 수량={RequestQty}", requestQty);
-    }
-
-    /// <summary>
-    /// MySQL 데이터베이스(cimon.주문1)에 주문 수량을 저장한다.
-    /// 주문ID는 DDNN 형식으로 생성한다. (DD: 일자 01~31, NN: 해당 일자의 순번 01부터 시작)
-    /// </summary>
-    /// <param name="requestQty">PLC에서 읽어온 주문 수량(D310)</param>
-    private void SaveOrderToDatabase(int requestQty)
-    {
-        // 주문1 테이블 스키마:
-        //  - 0번째 컬럼: 주문ID (Primary Key, NOT NULL)
-        //  - 1번째 컬럼: 주문수량 (NOT NULL)
-        const string connectionString =
-            "Driver={MySQL ODBC 5.3 ANSI Driver};Server=127.0.0.1;Database=cimon;UID=cimonedu;PWD=cimonedu1234;";
-
-        const string insertSql = "INSERT INTO cimon.주문1 (`주문ID`, `주문수량`) VALUES (?, ?)";
+        int machineStatus = _plc.ReadDevice(machineStatusDevice);
+        if (machineStatus != 0)
+        {
+            errorMessage = "설비가 동작 중일 때는 주문을 넣을 수 없습니다.";
+            Log.Warning("주문 거부: 설비 동작 중 (M101={MachineStatus}, Model={ModelCode}, Qty={Qty})",
+                machineStatus, modelCode, orderQuantity);
+            return false;
+        }
 
         try
         {
-            using var connection = new OdbcConnection(connectionString);
-            connection.Open();
+            int orderId;
 
-            // 주문ID 생성: Day(DD) + 일별 순번(NN)
-            string orderId = GenerateOrderId(connection);
-
-            using var command = new OdbcCommand(insertSql, connection);
-            // ODBC에서는 위치 기반 파라미터(?)를 사용한다.
-            command.Parameters.AddWithValue("@p1", orderId);
-            command.Parameters.AddWithValue("@p2", requestQty);
-
-            int rows = command.ExecuteNonQuery();
-
-            if (rows != 1)
+            // 1. DB에 주문 저장
+            using (var connection = new OdbcConnection(
+                       "Driver={MySQL ODBC 5.3 ANSI Driver};Server=127.0.0.1;Database=cimon;UID=cimonedu;PWD=cimonedu1234;"))
             {
-                Log.Warning("주문을 DB에 저장했지만 영향 받은 행 수가 예상과 다릅니다. RowsAffected={Rows}, RequestQty={RequestQty}, OrderId={OrderId}", rows, requestQty, orderId);
+                connection.Open();
+
+                orderId = GenerateNewOrderId(connection);
+
+                const string insertSql =
+                    "INSERT INTO `cimon`.`order` (`order_id`, `model_code`, `order_quantity`, `order_date`, `order_status`) " +
+                    "VALUES (?, ?, ?, ?, ?)";
+
+                using var command = new OdbcCommand(insertSql, connection);
+                command.Parameters.AddWithValue("@p1", orderId);
+                command.Parameters.AddWithValue("@p2", modelCode);
+                command.Parameters.AddWithValue("@p3", orderQuantity);
+                command.Parameters.AddWithValue("@p4", DateTime.Now);
+                command.Parameters.AddWithValue("@p5", "WAITING");
+
+                int rows = command.ExecuteNonQuery();
+                if (rows != 1)
+                {
+                    Log.Warning(
+                        "웹 주문 DB 저장 영향 받은 행 수가 1이 아닙니다. RowsAffected={Rows}, OrderId={OrderId}, Model={ModelCode}, Qty={Qty}",
+                        rows, orderId, modelCode, orderQuantity);
+                    errorMessage = "주문 정보를 DB에 저장하지 못했습니다.";
+                    return false;
+                }
             }
-            else
-            {
-                Log.Information("주문을 DB에 저장했습니다. 주문ID={OrderId}, 주문수량={RequestQty}", orderId, requestQty);
-            }
+
+            // 2. PLC로 주문 정보 전송 (모델명은 전송하지 않음)
+            const string orderSignal = "M310";
+            const string requestQuantityDevice = "D310";
+            const string workOrderDevice = "D315";
+            const string completionSignal = "M311";
+
+            // 완료 신호 초기화
+            _plc.WriteDevice(completionSignal, 0);
+
+            // 주문 수량 및 작업 지시 수량 설정
+            _plc.WriteDevice(requestQuantityDevice, orderQuantity);
+            _plc.WriteDevice(workOrderDevice, orderQuantity);
+
+            // 주문 요청 신호 ON
+            _plc.WriteDevice(orderSignal, 1);
+
+            Log.Information(
+                "웹 주문 생성 및 PLC 전송 완료. OrderId={OrderId}, Model={ModelCode}, Qty={Qty}",
+                orderId, modelCode, orderQuantity);
+
+            return true;
         }
         catch (Exception ex)
         {
-            // DB 오류는 로그로 남기고 상위에서 처리할 수 있도록 예외를 다시 던진다.
-            Log.Error(ex, "주문 DB 저장 중 오류가 발생했습니다. RequestQty={RequestQty}", requestQty);
-            throw;
+            Log.Error(ex, "웹 주문 처리 중 예외가 발생했습니다. Model={ModelCode}, Qty={Qty}", modelCode, orderQuantity);
+            errorMessage = "주문 처리 중 오류가 발생했습니다.";
+            return false;
         }
     }
 
-    /// <summary>
-    /// 주문ID를 DDNN 형식으로 생성한다.
-    /// DD : 일(day, 01~31), NN : 해당 일자의 순번(01부터 시작, 이전 주문ID의 최대 순번 + 1)
-    /// </summary>
-    private string GenerateOrderId(OdbcConnection connection)
+    private static bool IsSupportedModel(string modelCode)
     {
-        string dayPart = DateTime.Now.Day.ToString("00"); // 예: 05, 12, 31
+        return modelCode == "KIA_CARNIVAL"
+               || modelCode == "KIA_SORENTO"
+               || modelCode == "KIA_SPORTAGE";
+    }
 
-        const string selectSql = "SELECT COALESCE(MAX(CAST(SUBSTRING(`주문ID`, 3, 2) AS UNSIGNED)), 0) FROM cimon.주문1 WHERE `주문ID` LIKE ?";
+    /// <summary>
+    /// 신규 웹 주문용 주문ID를 1YYMMDDNNN 형식(총 10자리)으로 생성한다.
+    /// - 1 : 맨 앞 자리는 항상 1
+    /// - YYMMDD : 주문 일자(두 자리 연도, 월, 일)
+    /// - NNN : 해당 일자의 순번(001부터 시작)
+    /// </summary>
+    private int GenerateNewOrderId(OdbcConnection connection)
+    {
+        string datePart = DateTime.Now.ToString("yyMMdd"); // 예: 250101
+
+        int dayBase = int.Parse("1" + datePart + "000"); // 1YYMMDD000
+        int dayEnd = int.Parse("1" + datePart + "999");  // 1YYMMDD999
+
+        const string selectSql =
+            "SELECT COALESCE(MAX(`order_id`), 0) FROM `cimon`.`order` WHERE `order_id` BETWEEN ? AND ?";
 
         using var command = new OdbcCommand(selectSql, connection);
-        command.Parameters.AddWithValue("@p1", dayPart + "%");
+        command.Parameters.AddWithValue("@p1", dayBase);
+        command.Parameters.AddWithValue("@p2", dayEnd);
 
         object? result = command.ExecuteScalar();
         int currentMax = 0;
@@ -123,9 +141,22 @@ public class OrderService
             currentMax = Convert.ToInt32(result);
         }
 
-        int nextSequence = currentMax + 1;
-        string orderId = $"{dayPart}{nextSequence:00}"; // DDNN
+        int nextSequence;
+        if (currentMax == 0)
+        {
+            nextSequence = 1;
+        }
+        else
+        {
+            nextSequence = (currentMax % 1000) + 1;
+        }
 
+        if (nextSequence > 999)
+        {
+            throw new InvalidOperationException("하루에 생성 가능한 최대 주문 건수(999건)를 초과했습니다.");
+        }
+
+        int orderId = dayBase + nextSequence; // 1YYMMDDNNN
         return orderId;
     }
 }
