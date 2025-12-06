@@ -151,7 +151,7 @@ graph TD
 
 ## 6. 데이터베이스
 
-데이터베이스의 모든 테이블 컬럼은 `NOT NULL` 제약조건을 가집니다.
+데이터베이스의 모든 테이블 컬럼은 기본적으로 `NOT NULL` 제약조건을 가지지만, `production` 및 `production_history` 테이블의 `end_date` 컬럼은 `NULL`을 허용합니다.
 
 ### 테이블 이원화 전략 (`_history` 테이블)
 
@@ -197,7 +197,7 @@ graph TD
 | `good_quantity` | 양품 수량 | `INT(11)` | |
 | `bad_quantity` | 불량 수량 | `INT(11)` | |
 | `start_date` | 생산 시작 날짜 | `DATETIME` | |
-| `end_date` | 생산 종료 날짜 | `DATETIME` | |
+| `end_date` | 생산 종료 날짜 | `DATETIME` | `NULL 허용` |
 
 ### 4. `production_history` (생산 관리) [백업]
 
@@ -211,7 +211,7 @@ graph TD
 | `good_quantity` | 양품 수량 | `INT(11)` | |
 | `bad_quantity` | 불량 수량 | `INT(11)` | |
 | `start_date` | 생산 시작 날짜 | `DATETIME` | |
-| `end_date` | 생산 종료 날짜 | `DATETIME` | |
+| `end_date` | 생산 종료 날짜 | `DATETIME` | `NULL 허용` |
 | `backed_date` | 백업 날짜 | `DATETIME` | |
 
 ### 5. `vision_upper` (상부 비전 카메라)

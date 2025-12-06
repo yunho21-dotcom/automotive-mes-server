@@ -9,7 +9,7 @@ var logPath = Path.Combine(
 // Serilog configuration (console + file)
 Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
-    //.MinimumLevel.Debug()
+    //.MinimumLevel.Debug() // 가장 낮은 로그 레벨을 Debug로 설정
     .WriteTo.Async(c => c.Console())
     .WriteTo.Async(c => c.File(
         path: logPath,
@@ -23,11 +23,14 @@ builder.Host.UseSerilog();
 // --- Services ---
 builder.Services.AddRazorPages();
 
-// PLC / Order services
+// PLC 및 주문 서비스 등록
 builder.Services.AddSingleton<PlcConnector>();
 builder.Services.AddSingleton<OrderService>();
 
 var app = builder.Build();
+
+// 애플리케이션 시작 시 PLC 연결 및 모니터링을 바로 시작
+app.Services.GetRequiredService<PlcConnector>();
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
