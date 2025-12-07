@@ -84,13 +84,13 @@ public class PlcSignalProcessor : IPlcSignalProcessor
         [PlcSignal.AbnormalLineReset] = () =>
             Log.Fatal("[M131] 생산 라인 가동 중 PLC의 비정상적인 종료 또는 리셋이 감지되었습니다."),
         [PlcSignal.UpperProcessCompleted] = () =>
-            Log.Information("[M132] 상부(Upper) 공정 완료: 흰색 양품치수로 공정이 진행됩니다."),
+            Log.Information("[M132] 상부(Upper) 공정 완료: 상부 양품을 후공정 라인으로 이송합니다."),
         [PlcSignal.UpperProcessNg] = () =>
-            Log.Warning("[M133] 상부(Upper) 공정 NG: 흰색 불량치를 리젝 컨베이어로 배출합니다."),
+            Log.Warning("[M133] 상부(Upper) 공정 NG: 불량품 창고로 배출합니다."),
         [PlcSignal.LowerProcessCompleted] = () =>
-            Log.Information("[M134] 하부(Lower) 공정 완료: 배터리팩 양품치수로 공정이 진행됩니다."),
+            Log.Information("[M134] 하부(Lower) 공정 완료: 하부 양품을 후공정 라인으로 이송합니다."),
         [PlcSignal.LowerProcessNg] = () =>
-            Log.Warning("[M135] 하부(Lower) 공정 NG: 배터리팩 불량치를 리젝 컨베이어로 배출합니다."),
+            Log.Warning("[M135] 하부(Lower) 공정 NG: 불량품 창고로 배출합니다."),
         [PlcSignal.AutoMode] = () =>
             Log.Information("[M140] 설비 운전 모드가 [AUTO] 모드로 변경되었습니다."),
         [PlcSignal.ManualMode] = () =>
@@ -127,7 +127,7 @@ public class PlcSignalProcessor : IPlcSignalProcessor
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "PLC 장치 읽기 오류. Device={Device}", deviceName);
+            Log.Error(ex, "PLC 디바이스 읽기 오류. Device={Device}", deviceName);
             return;
         }
 

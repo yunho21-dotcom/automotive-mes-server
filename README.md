@@ -21,18 +21,21 @@ C# ASP.NET Core와 Mitsubishi PLC를 활용한 자동차 제조 전공정(Front-
     - [사전 요구사항](#사전-요구사항)
     - [설치 및 실행](#설치-및-실행)
   - [6. 데이터베이스](#6-데이터베이스)
-    - [테이블 이원화 전략 (`_history` 테이블)](#테이블-이원화-전략-_history-테이블)
-    - [1. `order` (주문 관리)](#1-order-주문-관리)
-    - [2. `order_history` (주문 관리) \[백업\]](#2-order_history-주문-관리-백업)
-    - [3. `production` (생산 관리)](#3-production-생산-관리)
-    - [4. `production_history` (생산 관리) \[백업\]](#4-production_history-생산-관리-백업)
-    - [5. `vision_upper` (상부 비전 카메라)](#5-vision_upper-상부-비전-카메라)
-    - [6. `vision_lower` (하부 비전 카메라)](#6-vision_lower-하부-비전-카메라)
+    - [테이블 이원화 전략 (Dual-Table Strategy)](#테이블-이원화-전략-dual-table-strategy)
+    - [`order` (주문 관리)](#order-주문-관리)
+    - [`order_history` (주문 관리) \[백업\]](#order_history-주문-관리-백업)
+    - [`production` (생산 관리)](#production-생산-관리)
+    - [`production_history` (생산 관리) \[백업\]](#production_history-생산-관리-백업)
+    - [`vision_upper` (상부 비전 카메라)](#vision_upper-상부-비전-카메라)
+    - [`vision_lower` (하부 비전 카메라)](#vision_lower-하부-비전-카메라)
   - [7. PLC 입출력 맵](#7-plc-입출력-맵)
     - [입력 (X)](#입력-x)
     - [출력 (Y)](#출력-y)
   - [8. 프로젝트 팀 구성 및 역할](#8-프로젝트-팀-구성-및-역할)
     - [나의 프로젝트 기여도](#나의-프로젝트-기여도)
+    - [개발 회고록 (Dev Log)](#개발-회고록-dev-log)
+
+
 
 ## 1. 프로젝트 소개
 
@@ -49,7 +52,7 @@ C# ASP.NET Core와 Mitsubishi PLC를 활용한 자동차 제조 전공정(Front-
 
 ### 설비 제어 및 공정 자동화
 *   **실시간 PLC 제어**: MX Component를 통해 설비(PLC)의 구동 상태를 모니터링하고 제어 명령을 수행합니다.
-*   **로봇 협동 조립**: Dobot 로봇을 통해 자동차 조립 공정과 도색 작업을 수행합니다.
+*   **Dobot 로봇 연계**: Dobot 로봇을 통해 자동차 조립 공정과 도색 작업을 수행합니다.
 
 ### 생산 관리 및 품질 분석
 *   **생산 오더 관리 (MOM)**: MySQL 데이터베이스를 기반으로 작업 지시를 생성하고, 공정 단계별 진행 상황을 추적 관리합니다.
@@ -151,20 +154,23 @@ graph TD
 
 ## 6. 데이터베이스
 
-데이터베이스의 모든 테이블 컬럼은 기본적으로 `NOT NULL` 제약조건을 가지지만, `production` 및 `production_history` 테이블의 `end_date` 컬럼은 `NULL`을 허용합니다.
+기본적으로 모든 컬럼은 `NOT NULL` 제약조건을 가지며, 예외적으로 생산 종료 시점이 나중에 결정되는 `production` 및 `production_history` 테이블의 `end_date` 컬럼만 `NULL`을 허용합니다.
 
-### 테이블 이원화 전략 (`_history` 테이블)
+### 테이블 이원화 전략 (Dual-Table Strategy)
 
-본 시스템의 데이터베이스는 `order`와 `production` 테이블, 그리고 각각에 대응하는 `order_history`와 `production_history` 테이블로 구성된 이원화 구조를 가집니다.
-
+본 프로젝트는 데이터 무결성과 성능 최적화를 위해 **이원화된 테이블 구조**를 채택했습니다.
 이러한 설계는 **CIMON SCADA 시스템의 태그(Tag) 구조적 한계**를 극복하고 성능을 최적화하기 위해 도입되었습니다. SCADA는 미리 생성된 정적 태그를 사용하므로, 데이터가 계속 누적되는 테이블을 직접 연동할 경우 성능 저하가 발생할 수 있습니다.
 
-- **운영 테이블 (`order`, `production`):** 현재 진행 중인 최신 데이터 30개만 유지하며, SCADA 시스템이 이 테이블을 참조하여 항상 가벼운 상태를 유지합니다.
-- **기록 테이블 (`_history`):** 운영 테이블의 데이터가 30개를 초과하거나 완료되면, 해당 데이터는 `_history` 테이블로 이전되어 영구 보존됩니다.
+*   **운영 테이블 (Active DB)**: `order`, `production`
+    *   현재 진행 중인 최신 데이터(최대 30건)만 유지합니다.
+    *   데이터 양을 일정하게 유지하여 SCADA 시스템의 부하를 최소화합니다.
+*   **기록 테이블 (History DB)**: `order_history`, `production_history`
+    *   운영 테이블에서 30건을 초과한 데이터는 이곳으로 **이관(Migration)**됩니다.
+    *   데이터의 영구 보존과 사후 분석을 위한 용도입니다.
 
 이 구조를 통해 **실시간 모니터링의 효율성**과 **데이터의 영구적 보존**이라는 두 가지 목표를 동시에 달성합니다.
 
-### 1. `order` (주문 관리)
+### `order` (주문 관리)
 
 | 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
 |---|---|---|---|
@@ -174,7 +180,7 @@ graph TD
 | `order_date` | 주문 날짜 | `DATETIME` | |
 | `order_status` | 주문 상태 | `VARCHAR(50)` | |
 
-### 2. `order_history` (주문 관리) [백업]
+### `order_history` (주문 관리) [백업]
 
 | 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
 |---|---|---|---|
@@ -186,7 +192,7 @@ graph TD
 | `order_status` | 주문 상태 | `VARCHAR(50)` | |
 | `backed_date` | 백업 날짜 | `DATETIME` | |
 
-### 3. `production` (생산 관리)
+### `production` (생산 관리)
 
 | 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
 |---|---|---|---|
@@ -199,7 +205,7 @@ graph TD
 | `start_date` | 생산 시작 날짜 | `DATETIME` | |
 | `end_date` | 생산 종료 날짜 | `DATETIME` | `NULL 허용` |
 
-### 4. `production_history` (생산 관리) [백업]
+### `production_history` (생산 관리) [백업]
 
 | 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
 |---|---|---|---|
@@ -214,7 +220,7 @@ graph TD
 | `end_date` | 생산 종료 날짜 | `DATETIME` | `NULL 허용` |
 | `backed_date` | 백업 날짜 | `DATETIME` | |
 
-### 5. `vision_upper` (상부 비전 카메라)
+### `vision_upper` (상부 비전 카메라)
 
 | 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
 |---|---|---|---|
@@ -224,7 +230,7 @@ graph TD
 | `result` | 결과 | `VARCHAR(50)` | |
 | `measured_at` | 측정 시각 | `DATETIME` | |
 
-### 6. `vision_lower` (하부 비전 카메라)
+### `vision_lower` (하부 비전 카메라)
 
 | 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
 |---|---|---|---|
@@ -299,3 +305,14 @@ graph TD
 *   **HMI / SCADA 구축**
     *   M2I HMI 작화 및 현장 제어 패널 구성
     *   CIMON SCADA를 활용한 공정 모니터링 시스템 구축
+
+### 개발 회고록 (Dev Log)
+
+이 프로젝트를 진행하며 마주친 기술적 난관과 해결 과정을 블로그에 기록했습니다.
+
+*   [MES 구축 프로젝트 1주차: 최종 프로젝트를 시작하며](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A921%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-1%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D)
+*   [MES 구축 프로젝트 2주차: 공정 설계와 PLC 통신 테스트](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A922%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-2%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D)
+*   [MES 구축 프로젝트 3주차: HMI 연동과 C# 제어의 시작](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A923%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-3%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D)
+*   [MES 구축 프로젝트 4주차: MES 서버의 기초 공사](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A924%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-4%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D)
+*   [MES 구축 프로젝트 5주차: DB 구축과 설비의 완성](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A925%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-5%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D)
+*   [MES 구축 프로젝트 6주차: 설비 로직 작성과 코드 품질 개선](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A926%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-6%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D)
