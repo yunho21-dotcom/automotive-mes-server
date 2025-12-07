@@ -1,10 +1,10 @@
-﻿public class OrderService
+public class OrderService
 {
-    private readonly PlcConnector _plc;
+    private readonly IPlcClient _plcClient;
 
-    public OrderService(PlcConnector plc)
+    public OrderService(IPlcClient plcClient)
     {
-        _plc = plc;
+        _plcClient = plcClient;
     }
 
     /// <summary>
@@ -35,7 +35,7 @@
         int machineStatus;
         try
         {
-            machineStatus = _plc.ReadDevice(machineStatusDevice);
+            machineStatus = _plcClient.ReadDevice(machineStatusDevice);
         }
         catch (Exception ex)
         {
@@ -57,8 +57,7 @@
             int orderId;
 
             // 1. DB에 주문 저장
-            using (var connection = new OdbcConnection(
-                       "Driver={MySQL ODBC 5.3 ANSI Driver};Server=127.0.0.1;Database=cimon;UID=cimonedu;PWD=cimonedu1234;"))
+            using (var connection = new OdbcConnection(DbConstants.OdbcConnectionString))
             {
                 connection.Open();
 
@@ -113,14 +112,14 @@
             const string completionSignal = "M311";
 
             // 주문 요청 신호 ON
-            _plc.WriteDevice(orderSignal, 1);
+            _plcClient.WriteDevice(orderSignal, 1);
 
             // 주문 수량 및 작업 지시 수량 설정
-            _plc.WriteDevice(requestQuantityDevice, orderQuantity);
-            _plc.WriteDevice(workOrderDevice, orderQuantity);
+            _plcClient.WriteDevice(requestQuantityDevice, orderQuantity);
+            _plcClient.WriteDevice(workOrderDevice, orderQuantity);
 
             // 주문 완료 신호 ON (1초 후에 PLC에서 꺼짐)
-            _plc.WriteDevice(completionSignal, 1);
+            _plcClient.WriteDevice(completionSignal, 1);
 
             Log.Information(
                 "웹 주문 생성 및 PLC 전송 완료. OrderId={OrderId}, Model={ModelCode}, Qty={Qty}",
@@ -151,7 +150,7 @@
     /// </summary>
     private int GenerateNewOrderId(OdbcConnection connection)
     {
-        string datePart = DateTime.Now.ToString("yyMMdd"); // 예: 250101
+        string datePart = DateTime.Now.ToString("yyMMdd");
 
         int dayBase = int.Parse("1" + datePart + "000"); // 1YYMMDD000
         int dayEnd = int.Parse("1" + datePart + "999");  // 1YYMMDD999
