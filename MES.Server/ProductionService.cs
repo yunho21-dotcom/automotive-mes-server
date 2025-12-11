@@ -109,6 +109,94 @@ public class ProductionService : IProductionService
         EnforceProductionRetention(connection);
     }
 
+    public void IncrementLatestProductionGoodQuantity()
+    {
+        using var connection = new OdbcConnection(DbConstants.OdbcConnectionString);
+        connection.Open();
+
+        const string selectSql =
+            "SELECT `production_id` " +
+            "FROM `cimon`.`production` " +
+            "WHERE `end_date` IS NULL " +
+            "ORDER BY `start_date` DESC " +
+            "LIMIT 1";
+
+        using var selectCommand = new OdbcCommand(selectSql, connection);
+        object? result = selectCommand.ExecuteScalar();
+
+        if (result == null || result == DBNull.Value)
+        {
+            Log.Warning("good_quantity를 증가시키려고 했으나 진행 중인 production 레코드(end_date IS NULL)를 찾을 수 없습니다.");
+            return;
+        }
+
+        int productionId = Convert.ToInt32(result);
+
+        const string updateSql =
+            "UPDATE `cimon`.`production` " +
+            "SET `good_quantity` = `good_quantity` + 1 " +
+            "WHERE `production_id` = ?";
+
+        using var updateCommand = new OdbcCommand(updateSql, connection);
+        updateCommand.Parameters.AddWithValue("@p1", productionId);
+
+        int rows = updateCommand.ExecuteNonQuery();
+        if (rows != 1)
+        {
+            Log.Warning(
+                "good_quantity 증가 UPDATE가 {Rows}건에 대해 실행되었습니다. (예상: 1건) ProductionId={ProductionId}",
+                rows, productionId);
+        }
+        else
+        {
+            Log.Information("production의 good_quantity를 1 증가시켰습니다. ProductionId={ProductionId}", productionId);
+        }
+    }
+
+    public void IncrementLatestProductionBadQuantity()
+    {
+        using var connection = new OdbcConnection(DbConstants.OdbcConnectionString);
+        connection.Open();
+
+        const string selectSql =
+            "SELECT `production_id` " +
+            "FROM `cimon`.`production` " +
+            "WHERE `end_date` IS NULL " +
+            "ORDER BY `start_date` DESC " +
+            "LIMIT 1";
+
+        using var selectCommand = new OdbcCommand(selectSql, connection);
+        object? result = selectCommand.ExecuteScalar();
+
+        if (result == null || result == DBNull.Value)
+        {
+            Log.Warning("bad_quantity를 증가시키려고 했으나 진행 중인 production 레코드(end_date IS NULL)를 찾을 수 없습니다.");
+            return;
+        }
+
+        int productionId = Convert.ToInt32(result);
+
+        const string updateSql =
+            "UPDATE `cimon`.`production` " +
+            "SET `bad_quantity` = `bad_quantity` + 1 " +
+            "WHERE `production_id` = ?";
+
+        using var updateCommand = new OdbcCommand(updateSql, connection);
+        updateCommand.Parameters.AddWithValue("@p1", productionId);
+
+        int rows = updateCommand.ExecuteNonQuery();
+        if (rows != 1)
+        {
+            Log.Warning(
+                "bad_quantity 증가 UPDATE가 {Rows}건에 대해 실행되었습니다. (예상: 1건) ProductionId={ProductionId}",
+                rows, productionId);
+        }
+        else
+        {
+            Log.Information("production의 bad_quantity를 1 증가시켰습니다. ProductionId={ProductionId}", productionId);
+        }
+    }
+
     private int GenerateNewProductionId(OdbcConnection connection)
     {
         string datePart = DateTime.Now.ToString("yyMMdd");
