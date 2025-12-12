@@ -87,23 +87,27 @@ graph TD
     end
 
     WPF <-->|"TCP/IP"| Server
-    Vision <-->|"TCP/IP"| Server
+    Vision -->|"TCP/IP (Data Only)"| Server
     
     Server <-->|"Query/Save"| DB
     Server <-->|"PlcConnector"| MX
     MX <-->|"PLC Communication"| PLC
+    
     Dobot <-->|"pymcprotocol"| PLC
+    Vision <-->|"pymcprotocol"| PLC
 ```
 
 ### 주요 구성 요소
 
 1.  **PLC-연계 제어**
     *   **MES Server**: **MX Component**를 미들웨어로 사용하여 Mitsubishi PLC와 통신합니다. 설비 데이터를 주기적으로 Polling(읽기)하거나 제어 명령(쓰기)을 수행합니다.
-    *   **Dobot Client**: **pymcprotocol** 라이브러리를 통해 PLC와 직접 통신합니다. PLC로부터 작업 신호(조립, 불량품 이송 등)를 수신하여 로봇 동작을 수행하고, 완료 신호를 PLC에 다시 전송합니다.
+    *   **Device Clients (Vision, Dobot)**: **pymcprotocol** 라이브러리를 통해 PLC와 직접 통신합니다.
+        *   **Vision Client**: PLC로부터 검사 시작 신호를 직접 읽어(Read) 촬영을 진행하며, 도색 불량 판정 결과를 PLC 메모리에 기록(Write)합니다.
+        *   **Dobot Client**: PLC로부터 작업 신호를 수신하여 로봇 동작을 수행하고, 완료 신호를 전송합니다.
 
 2.  **서버-클라이언트 통신 (TCP/IP)**
-    *   **Vision Client**: 서버로부터 검사 명령을 수신하고, 카메라로 판독한 제품의 도색 불량 여부를 서버로 전송합니다.
-    *   **WPF Client**: 작업자를 위한 대시보드로, 생산 현황 모니터링 및 공정 관리 기능을 제공하기 위해 서버와 통신합니다.
+    *   **Vision Client**: 도색 불량 판정 결과를 서버로 전송합니다. 이 과정은 데이터 로깅을 위한 단방향 통신으로, **서버로부터 별도의 응답(Response)을 기다리지 않고** 데이터를 전송합니다.
+    *   **WPF Client**: 작업자를 위한 대시보드로, 생산 현황 모니터링 및 공정 관리 기능을 제공하기 위해 서버와 양방향 통신합니다.
 
 3.  **데이터 관리 및 로깅**
     *   **OrderService**: 수집된 데이터를 비즈니스 로직에 맞춰 가공합니다.
