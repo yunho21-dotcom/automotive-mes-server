@@ -234,29 +234,26 @@ public class OrderService
             DateTime orderDate = (DateTime)reader["order_date"];
             string orderStatus = reader["order_status"]?.ToString() ?? string.Empty;
 
-            int backupId = GetNextOrderHistoryBackupId(connection);
-
             const string insertHistorySql =
                 "INSERT INTO `cimon`.`order_history` " +
-                "(`backup_id`, `order_id`, `model_code`, `order_quantity`, `order_date`, `order_status`, `backed_date`) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?)";
+                "(`order_id`, `model_code`, `order_quantity`, `order_date`, `order_status`, `backed_date`) " +
+                "VALUES (?, ?, ?, ?, ?, ?)";
 
             using (var insertHistoryCommand = new OdbcCommand(insertHistorySql, connection))
             {
-                insertHistoryCommand.Parameters.AddWithValue("@p1", backupId);
-                insertHistoryCommand.Parameters.AddWithValue("@p2", orderId);
-                insertHistoryCommand.Parameters.AddWithValue("@p3", modelCode);
-                insertHistoryCommand.Parameters.AddWithValue("@p4", orderQuantity);
-                insertHistoryCommand.Parameters.AddWithValue("@p5", orderDate);
-                insertHistoryCommand.Parameters.AddWithValue("@p6", orderStatus);
-                insertHistoryCommand.Parameters.AddWithValue("@p7", DateTime.Now);
+                insertHistoryCommand.Parameters.AddWithValue("@p1", orderId);
+                insertHistoryCommand.Parameters.AddWithValue("@p2", modelCode);
+                insertHistoryCommand.Parameters.AddWithValue("@p3", orderQuantity);
+                insertHistoryCommand.Parameters.AddWithValue("@p4", orderDate);
+                insertHistoryCommand.Parameters.AddWithValue("@p5", orderStatus);
+                insertHistoryCommand.Parameters.AddWithValue("@p6", DateTime.Now);
 
                 int historyRows = insertHistoryCommand.ExecuteNonQuery();
                 if (historyRows != 1)
                 {
                     Log.Warning(
-                        "order_history 저장 영향 행 수가 1이 아닙니다. Rows={Rows}, OrderId={OrderId}, BackupId={BackupId}",
-                        historyRows, orderId, backupId);
+                        "order_history 저장 영향 행 수가 1이 아닙니다. Rows={Rows}, OrderId={OrderId}",
+                        historyRows, orderId);
                 }
             }
 
@@ -277,24 +274,5 @@ public class OrderService
                 }
             }
         }
-    }
-
-    /// <summary>
-    /// order_history 테이블의 backup_id 를 0부터 1씩 증가시키는 규칙으로 생성한다.
-    /// </summary>
-    private int GetNextOrderHistoryBackupId(OdbcConnection connection)
-    {
-        const string sql = "SELECT COALESCE(MAX(`backup_id`), -1) FROM `cimon`.`order_history`";
-
-        using var command = new OdbcCommand(sql, connection);
-        object? result = command.ExecuteScalar();
-
-        int current = -1;
-        if (result != null && result != DBNull.Value)
-        {
-            current = Convert.ToInt32(result);
-        }
-
-        return current + 1;
     }
 }

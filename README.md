@@ -41,7 +41,7 @@ C# ASP.NET Core와 Mitsubishi PLC를 활용한 자동차 제조 전공정(Front-
 
 본 프로젝트는 자동차 차체(Body) 조립을 위한 **스마트 팩토리 전공정(Front-End Process) 관리 MES 시스템**입니다.
 
-**ASP.NET 기반의 서버를**를 주축으로, 설비(PLC), 로봇(Dobot), 비전, 그리고 관리자(WPF Client)를 유기적으로 연결하였습니다.
+**ASP.NET 기반의 서버**를 주축으로, 설비(PLC), 로봇(Dobot), 비전, 그리고 관리자(WPF Client)를 유기적으로 연결하였습니다.
 단순히 설비를 제어하는 것을 넘어, 생산 주문(Order) 생성부터 로봇 조립, 비전 검사를 통한 품질 판정까지
 **제조 공정의 전체 라이프사이클을 자동화하고 데이터를 시각화**하는 데 중점을 두었습니다.
 
@@ -55,12 +55,12 @@ C# ASP.NET Core와 Mitsubishi PLC를 활용한 자동차 제조 전공정(Front-
 *   **Dobot 로봇 연계**: Dobot 로봇을 통해 자동차 조립 공정과 도색 작업을 수행합니다.
 
 ### 생산 관리 및 품질 분석
-*   **생산 오더 관리 (MOM)**: MySQL 데이터베이스를 기반으로 작업 지시를 생성하고, 공정 단계별 진행 상황을 추적 관리합니다.
-*   **비전 기반 품질 관리 (QA)**: 비전 카메라가 판독한 양품/불량 데이터를 수신하여 DB에 적재하고, 불량 발생 시 즉각적인 알람 및 리젝트(Reject) 로직을 수행합니다.
+*   **생산 오더 관리 (MOM)**: MySQL 데이터베이스를 기반으로 작업 지시를 생성하고, 공정 상황을 추적 관리합니다.
+*   **비전 기반 품질 관리 (QA)**: 비전 카메라가 판독한 양품/불량 데이터를 수신하여 DB에 저장하고, 불량 발생 시 즉각적인 알람 및 리젝트(Reject) 로직을 수행합니다.
 
 ### 시스템 모니터링
-*   **통합 대시보드**: WPF 클라이언트를 통해 전체 공정의 흐름과 생산 실적(불량률, 가동률 등)을 시각적으로 모니터링할 수 있습니다.
-*   **시스템 로그 추적**: Serilog를 도입하여 서버 및 장비 간의 통신 로그와 예외 상황을 기록, 시스템 안정성을 확보했습니다.
+*   **통합 대시보드**: WPF 클라이언트를 통해 전체 공정의 흐름과 생산 실적을 시각적으로 모니터링할 수 있습니다.
+*   **시스템 로그 추적**: Serilog를 도입하여 서버와 장비 간의 통신 로그 및 예외 상황을 기록, 시스템 안정성을 확보했습니다.
 
 ## 3. 시스템 아키텍처
 
@@ -102,11 +102,11 @@ graph TD
 1.  **PLC-연계 제어**
     *   **MES Server**: **MX Component**를 미들웨어로 사용하여 Mitsubishi PLC와 통신합니다. 설비 데이터를 주기적으로 Polling(읽기)하거나 제어 명령(쓰기)을 수행합니다.
     *   **Device Clients (Vision, Dobot)**: **pymcprotocol** 라이브러리를 통해 PLC와 직접 통신합니다.
-        *   **Vision Client**: PLC로부터 검사 시작 신호를 직접 읽어(Read) 촬영을 진행하며, 도색 불량 판정 결과를 PLC 메모리에 기록(Write)합니다.
+        *   **Vision Client**: PLC로부터 검사 시작 신호를 직접 읽어(Read) 촬영을 진행하며, 도색 판정 결과를 PLC 메모리에 기록(Write)합니다.
         *   **Dobot Client**: PLC로부터 작업 신호를 수신하여 로봇 동작을 수행하고, 완료 신호를 전송합니다.
 
 2.  **서버-클라이언트 통신 (TCP/IP)**
-    *   **Vision Client**: 도색 불량 판정 결과를 서버로 전송합니다. 이 과정은 데이터 로깅을 위한 단방향 통신으로, **서버로부터 별도의 응답(Response)을 기다리지 않고** 데이터를 전송합니다.
+    *   **Vision Client**: 도색 판정 결과를 서버로 전송합니다. 이 과정은 데이터 로깅을 위한 단방향 통신으로, **서버로부터 별도의 응답(Response)을 기다리지 않고** 데이터를 전송합니다.
     *   **WPF Client**: 작업자를 위한 대시보드로, 생산 현황 모니터링 및 공정 관리 기능을 제공하기 위해 서버와 양방향 통신합니다.
 
 3.  **데이터 관리 및 로깅**
@@ -178,7 +178,7 @@ graph TD
 
 | 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
 |---|---|---|---|
-| `order_id` | 주문 ID | `INT(11)` | `Primary Key` |
+| `order_id` | 주문 ID | `INT(11)` | `PRIMARY KEY` |
 | `model_code` | 모델명 | `VARCHAR(50)` | |
 | `order_quantity`| 주문 수량 | `INT(11)` | |
 | `order_date` | 주문 날짜 | `DATETIME` | |
@@ -188,7 +188,7 @@ graph TD
 
 | 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
 |---|---|---|---|
-| `backup_id` | 백업 ID | `INT(11)` | `Primary Key` |
+| `backup_id` | 백업 ID | `INT(11)` | `PRIMARY KEY` & `AUTO_INCREMENT` |
 | `order_id` | 주문 ID | `INT(11)` | |
 | `model_code` | 모델명 | `VARCHAR(50)` | |
 | `order_quantity`| 주문 수량 | `INT(11)` | |
@@ -200,7 +200,7 @@ graph TD
 
 | 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
 |---|---|---|---|
-| `production_id` | 생산 ID | `INT(11)` | `Primary Key` |
+| `production_id` | 생산 ID | `INT(11)` | `PRIMARY KEY` |
 | `model_code` | 모델명 | `VARCHAR(50)` | |
 | `upper_quantity`| 상부 생산 수량 | `INT(11)` | |
 | `lower_quantity`| 하부 생산 수량 | `INT(11)` | |
@@ -213,7 +213,7 @@ graph TD
 
 | 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
 |---|---|---|---|
-| `backup_id` | 백업 ID | `INT(11)` | `Primary Key` |
+| `backup_id` | 백업 ID | `INT(11)` | `PRIMARY KEY` & `AUTO_INCREMENT` |
 | `production_id` | 생산 ID | `INT(11)` | |
 | `model_code` | 모델명 | `VARCHAR(50)` | |
 | `upper_quantity`| 상부 생산 수량 | `INT(11)` | |
@@ -228,7 +228,7 @@ graph TD
 
 | 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
 |---|---|---|---|
-| `vision_id` | 비전 ID | `INT(11)` | `Primary Key` |
+| `vision_id` | 비전 ID | `INT(11)` | `PRIMARY KEY` & `AUTO_INCREMENT` |
 | `production_id` | 생산 ID | `INT(11)` | |
 | `model_code` | 모델명 | `VARCHAR(50)` | |
 | `result` | 결과 | `VARCHAR(50)` | |
@@ -238,7 +238,7 @@ graph TD
 
 | 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
 |---|---|---|---|
-| `vision_id` | 비전 ID | `INT(11)` | `Primary Key` |
+| `vision_id` | 비전 ID | `INT(11)` | `PRIMARY KEY` & `AUTO_INCREMENT` |
 | `production_id` | 생산 ID | `INT(11)` | |
 | `model_code` | 모델명 | `VARCHAR(50)` | |
 | `result` | 결과 | `VARCHAR(50)` | |

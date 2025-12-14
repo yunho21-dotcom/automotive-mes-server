@@ -276,40 +276,37 @@ public class ProductionService : IProductionService
             object endDateObj = reader["end_date"];
             DateTime? endDate = endDateObj == DBNull.Value ? (DateTime?)null : (DateTime)endDateObj;
 
-            int backupId = GetNextProductionHistoryBackupId(connection);
-
             const string insertHistorySql =
                 "INSERT INTO `cimon`.`production_history` " +
-                "(`backup_id`, `production_id`, `model_code`, `upper_quantity`, `lower_quantity`, `good_quantity`, `bad_quantity`, `start_date`, `end_date`, `backed_date`) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "(`production_id`, `model_code`, `upper_quantity`, `lower_quantity`, `good_quantity`, `bad_quantity`, `start_date`, `end_date`, `backed_date`) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
             using (var insertHistoryCommand = new OdbcCommand(insertHistorySql, connection))
             {
-                insertHistoryCommand.Parameters.AddWithValue("@p1", backupId);
-                insertHistoryCommand.Parameters.AddWithValue("@p2", productionId);
-                insertHistoryCommand.Parameters.AddWithValue("@p3", modelCode);
-                insertHistoryCommand.Parameters.AddWithValue("@p4", upperQuantity);
-                insertHistoryCommand.Parameters.AddWithValue("@p5", lowerQuantity);
-                insertHistoryCommand.Parameters.AddWithValue("@p6", goodQuantity);
-                insertHistoryCommand.Parameters.AddWithValue("@p7", badQuantity);
-                insertHistoryCommand.Parameters.AddWithValue("@p8", startDate);
+                insertHistoryCommand.Parameters.AddWithValue("@p1", productionId);
+                insertHistoryCommand.Parameters.AddWithValue("@p2", modelCode);
+                insertHistoryCommand.Parameters.AddWithValue("@p3", upperQuantity);
+                insertHistoryCommand.Parameters.AddWithValue("@p4", lowerQuantity);
+                insertHistoryCommand.Parameters.AddWithValue("@p5", goodQuantity);
+                insertHistoryCommand.Parameters.AddWithValue("@p6", badQuantity);
+                insertHistoryCommand.Parameters.AddWithValue("@p7", startDate);
                 if (endDate.HasValue)
                 {
-                    insertHistoryCommand.Parameters.AddWithValue("@p9", endDate.Value);
+                    insertHistoryCommand.Parameters.AddWithValue("@p8", endDate.Value);
                 }
                 else
                 {
-                    insertHistoryCommand.Parameters.AddWithValue("@p9", DBNull.Value);
+                    insertHistoryCommand.Parameters.AddWithValue("@p8", DBNull.Value);
                 }
 
-                insertHistoryCommand.Parameters.AddWithValue("@p10", DateTime.Now);
+                insertHistoryCommand.Parameters.AddWithValue("@p9", DateTime.Now);
 
                 int historyRows = insertHistoryCommand.ExecuteNonQuery();
                 if (historyRows != 1)
                 {
                     Log.Warning(
-                        "production_history INSERT가 {Rows}개 행에 영향을 미쳤습니다. (예상: 1) ProductionId={ProductionId}, BackupId={BackupId}",
-                        historyRows, productionId, backupId);
+                        "production_history INSERT가 {Rows}개 행에 영향을 미쳤습니다. (예상: 1) ProductionId={ProductionId}",
+                        historyRows, productionId);
                 }
             }
 
@@ -330,21 +327,5 @@ public class ProductionService : IProductionService
                 }
             }
         }
-    }
-
-    private int GetNextProductionHistoryBackupId(OdbcConnection connection)
-    {
-        const string sql = "SELECT COALESCE(MAX(`backup_id`), -1) FROM `cimon`.`production_history`";
-
-        using var command = new OdbcCommand(sql, connection);
-        object? result = command.ExecuteScalar();
-
-        int current = -1;
-        if (result != null && result != DBNull.Value)
-        {
-            current = Convert.ToInt32(result);
-        }
-
-        return current + 1;
     }
 }
