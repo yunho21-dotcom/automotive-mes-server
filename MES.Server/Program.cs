@@ -35,7 +35,17 @@ builder.Services.AddSingleton<OrderService>();
 var app = builder.Build();
 
 // 애플리케이션 시작 시 PLC 연결 및 모니터링 시작
-app.Services.GetRequiredService<PlcConnector>();
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    try
+    {
+        app.Services.GetRequiredService<PlcConnector>();
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "PLC 초기화에 실패했습니다.");
+    }
+});
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -53,4 +63,26 @@ app.UseAuthorization();
 
 app.MapRazorPages();
 
-app.Run();
+try
+{
+    app.Run();
+}
+catch (IOException ex) when (IsAddressAlreadyInUse(ex))
+{
+    Log.Fatal(ex, "포트 5010이 이미 사용 중입니다. 실행 중인 MES.Server/IIS Express를 종료 후 다시 실행하세요.");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
+
+static bool IsAddressAlreadyInUse(IOException ex)
+{
+    if (ex.InnerException is Microsoft.AspNetCore.Connections.AddressInUseException)
+    {
+        return true;
+    }
+
+    return ex.InnerException is System.Net.Sockets.SocketException socketException &&
+           socketException.SocketErrorCode == System.Net.Sockets.SocketError.AddressAlreadyInUse;
+}

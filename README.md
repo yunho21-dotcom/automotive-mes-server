@@ -322,3 +322,4 @@ graph TD
 *   [MES 구축 프로젝트 4주차: MES 서버의 기초 공사](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A924%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-4%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D)
 *   [MES 구축 프로젝트 5주차: DB 구축과 설비의 완성](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A925%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-5%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D)
 *   [MES 구축 프로젝트 6주차: 설비 로직 작성과 코드 품질 개선](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A926%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-6%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D)
+*   [MES 구축 프로젝트 7주차: SCADA 관제 구현과 트러블 슈팅](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A927%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-7%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D)
