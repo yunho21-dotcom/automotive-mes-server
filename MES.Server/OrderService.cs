@@ -105,14 +105,17 @@ public class OrderService
                 EnforceOrderRetention(connection);
             }
 
-            // 2. PLC로 주문 정보 전송 (모델명은 전송하지 않음)
+            // 2. PLC로 주문 정보 전송 (D1: 모델 코드)
             const string orderSignal = "M310";
+            const string modelCodeDevice = "D1";
             const string requestQuantityDevice = "D310";
             const string workOrderDevice = "D315";
             const string completionSignal = "M311";
 
             // 주문 요청 신호 ON
             _plcClient.WriteDevice(orderSignal, 1);
+
+            _plcClient.WriteDevice(modelCodeDevice, GetPlcModelCode(modelCode));
 
             // 주문 수량 및 작업 지시 수량 설정
             _plcClient.WriteDevice(requestQuantityDevice, orderQuantity);
@@ -137,9 +140,18 @@ public class OrderService
 
     private static bool IsSupportedModel(string modelCode)
     {
-        return modelCode == "KIA_CARNIVAL"
-               || modelCode == "KIA_SORENTO"
-               || modelCode == "KIA_SPORTAGE";
+        return GetPlcModelCode(modelCode) != 0;
+    }
+
+    private static int GetPlcModelCode(string modelCode)
+    {
+        return modelCode switch
+        {
+            "KIA_CARNIVAL" => 1,
+            "KIA_SORENTO" => 2,
+            "KIA_SPORTAGE" => 3,
+            _ => 0
+        };
     }
 
     /// <summary>

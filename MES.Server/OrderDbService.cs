@@ -13,33 +13,55 @@ public class OrderDbService : IOrderService
         connection.Open();
 
         const string selectSql =
-            "SELECT `order_id` " +
+            "SELECT `order_id`, `order_status` " +
             "FROM `cimon`.`order` " +
             "ORDER BY `order_date` DESC " +
             "LIMIT 1";
 
         using var selectCommand = new OdbcCommand(selectSql, connection);
-        object? result = selectCommand.ExecuteScalar();
 
-        if (result == null || result == DBNull.Value)
+        int orderId;
+        string? currentStatus;
+
+        using (var reader = selectCommand.ExecuteReader())
         {
-            Log.Warning("주문 상태를 {Status}(으)로 갱신하려 했으나, order 테이블에 데이터가 없습니다.",
-                newStatus.ToDbString());
+            if (!reader.Read())
+            {
+                Log.Warning("주문 상태를 {Status}(으)로 갱신하려 했으나, order 테이블에 데이터가 없습니다.",
+                    newStatus.ToDbString());
+                return;
+            }
+
+            orderId = Convert.ToInt32(reader["order_id"]);
+            currentStatus = reader["order_status"]?.ToString();
+        }
+
+        if (newStatus == OrderStatus.Cancelled &&
+            string.Equals(currentStatus, OrderStatus.Completed.ToDbString(), StringComparison.OrdinalIgnoreCase))
+        {
+            Log.Information(
+                "주문 상태가 이미 COMPLETED 입니다. CANCELLED 로 변경하지 않습니다. OrderId={OrderId}",
+                orderId);
             return;
         }
 
-        int orderId = Convert.ToInt32(result);
-
-        const string updateSql =
-            "UPDATE `cimon`.`order` " +
-            "SET `order_status` = ? " +
-            "WHERE `order_id` = ?";
+        string updateSql = newStatus == OrderStatus.Cancelled
+            ? "UPDATE `cimon`.`order` SET `order_status` = ? WHERE `order_id` = ? AND `order_status` <> 'COMPLETED'"
+            : "UPDATE `cimon`.`order` SET `order_status` = ? WHERE `order_id` = ?";
 
         using var updateCommand = new OdbcCommand(updateSql, connection);
         updateCommand.Parameters.AddWithValue("@p1", newStatus.ToDbString());
         updateCommand.Parameters.AddWithValue("@p2", orderId);
 
         int rows = updateCommand.ExecuteNonQuery();
+        if (rows == 0 && newStatus == OrderStatus.Cancelled)
+        {
+            Log.Information(
+                "주문 상태를 CANCELLED 로 변경하지 않았습니다. (이미 COMPLETED 일 수 있음) OrderId={OrderId}",
+                orderId);
+            return;
+        }
+
         if (rows != 1)
         {
             Log.Warning(
