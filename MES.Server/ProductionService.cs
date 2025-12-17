@@ -197,6 +197,74 @@ public class ProductionService : IProductionService
         }
     }
 
+    public void InsertVisionUpperResult(string result)
+    {
+        InsertVisionResult("vision_upper", result);
+    }
+
+    public void InsertVisionLowerResult(string result)
+    {
+        InsertVisionResult("vision_lower", result);
+    }
+
+    private void InsertVisionResult(string tableName, string result)
+    {
+        if (tableName != "vision_upper" && tableName != "vision_lower")
+        {
+            throw new ArgumentOutOfRangeException(nameof(tableName), tableName, "Unsupported vision table.");
+        }
+
+        using var connection = new OdbcConnection(DbConstants.OdbcConnectionString);
+        connection.Open();
+
+        const string selectSql =
+            "SELECT `production_id`, `model_code`, `end_date` " +
+            "FROM `cimon`.`production` " +
+            "ORDER BY `start_date` DESC " +
+            "LIMIT 1";
+
+        using var selectCommand = new OdbcCommand(selectSql, connection);
+        using var reader = selectCommand.ExecuteReader();
+
+        if (!reader.Read())
+        {
+            Log.Warning(
+                "Vision insert skipped because no production row exists. Table={Table}, Result={Result}",
+                tableName, result);
+            return;
+        }
+
+        object endDateObj = reader["end_date"];
+        if (endDateObj != DBNull.Value)
+        {
+            Log.Warning(
+                "Vision insert skipped because latest production already ended. Table={Table}, Result={Result}",
+                tableName, result);
+            return;
+        }
+
+        int productionId = Convert.ToInt32(reader["production_id"]);
+        string modelCode = reader["model_code"]?.ToString() ?? string.Empty;
+
+        string insertSql =
+            $"INSERT INTO `cimon`.`{tableName}` (`production_id`, `model_code`, `result`, `measured_at`) " +
+            "VALUES (?, ?, ?, ?)";
+
+        using var insertCommand = new OdbcCommand(insertSql, connection);
+        insertCommand.Parameters.AddWithValue("@p1", productionId);
+        insertCommand.Parameters.AddWithValue("@p2", modelCode);
+        insertCommand.Parameters.AddWithValue("@p3", result);
+        insertCommand.Parameters.AddWithValue("@p4", DateTime.Now);
+
+        int rows = insertCommand.ExecuteNonQuery();
+        if (rows != 1)
+        {
+            Log.Warning(
+                "Vision insert affected {Rows} rows (expected 1). Table={Table}, ProductionId={ProductionId}, ModelCode={ModelCode}, Result={Result}",
+                rows, tableName, productionId, modelCode, result);
+        }
+    }
+
     private int GenerateNewProductionId(OdbcConnection connection)
     {
         string datePart = DateTime.Now.ToString("yyMMdd");

@@ -151,6 +151,34 @@ public class PlcSignalProcessor : IPlcSignalProcessor
 
     private void HandleBusiness(PlcSignal signal)
     {
+        if (signal is PlcSignal.UpperVisionOk or PlcSignal.UpperVisionNg or PlcSignal.LowerVisionOk or PlcSignal.LowerVisionNg)
+        {
+            try
+            {
+                switch (signal)
+                {
+                    case PlcSignal.UpperVisionOk:
+                        _productionService.InsertVisionUpperResult("OK");
+                        break;
+                    case PlcSignal.UpperVisionNg:
+                        _productionService.InsertVisionUpperResult("NG");
+                        break;
+                    case PlcSignal.LowerVisionOk:
+                        _productionService.InsertVisionLowerResult("OK");
+                        break;
+                    case PlcSignal.LowerVisionNg:
+                        _productionService.InsertVisionLowerResult("NG");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[M127~M130] Vision judgement DB insert failed. Signal={Signal}", signal);
+            }
+
+            return;
+        }
+
         if (signal is PlcSignal.ProductionStart or PlcSignal.FrontEndCompleted or PlcSignal.Paused
             or PlcSignal.Resumed or PlcSignal.CancelRequested)
         {
@@ -231,4 +259,3 @@ public class PlcSignalProcessor : IPlcSignalProcessor
         }
     }
 }
-

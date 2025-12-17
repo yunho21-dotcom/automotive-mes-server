@@ -5,4 +5,6 @@ public interface IProductionService
     void EnforceProductionRetention();
     void IncrementLatestProductionGoodQuantity();
     void IncrementLatestProductionBadQuantity();
+    void InsertVisionUpperResult(string result);
+    void InsertVisionLowerResult(string result);
 }
