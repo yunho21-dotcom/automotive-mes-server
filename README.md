@@ -5,7 +5,6 @@
 ## 목차
 
 - [전기차 전공정 MES 구축 프로젝트](#전기차-전공정-mes-구축-프로젝트)
-  - [목차](#목차)
   - [1. 프로젝트 소개](#1-프로젝트-소개)
   - [2. 주요 기능](#2-주요-기능)
   - [3. 시스템 아키텍처](#3-시스템-아키텍처)
@@ -17,12 +16,11 @@
     - [나의 프로젝트 기여도](#나의-프로젝트-기여도)
     - [개발 회고록 (Dev Log)](#개발-회고록-dev-log)
 
-
 ## 1. 프로젝트 소개
 
 > **"스스로 판단하고 움직이는, 살아있는 전기차 공장을 구현하다."**
 
-본 프로젝트는 제어(OT)와 정보(IT)가 실시간으로 소통하는 **전기차 전공정(Front-End) 스마트 팩토리**입니다.
+본 프로젝트는 제어(OT)와 정보(IT)가 실시간으로 소통하는 **전기차 전공정(front-end process) 스마트 팩토리**입니다.
 
 **ASP.NET 기반의 서버**를 주축으로, 설비(PLC), 비전(Vision), 로봇(Dobot)을 유기적으로 연결하였습니다.
 단순히 설비를 제어하는 것을 넘어, 생산 주문(Order)부터 로봇 조립, 비전 검사를 통한 품질 판정까지
@@ -36,10 +34,10 @@
 
 ### 생산 관리 및 품질 분석
 *   **생산 오더 관리**: MySQL 데이터베이스를 기반으로 작업 지시를 생성하고, 공정 상황을 추적 관리합니다.
-*   **품질 관리**: 비전 카메라가 판독한 양품/불량 데이터를 DB에 저장하고, 불량 발생 시 알람 발생 및 불량품 창고로 이송합니다.
+*   **품질 관리**: 비전 카메라가 판독한 양품/불량 데이터를 DB에 저장하고, 불량 발생 시 알람 및 불량품 창고로 이송합니다.
 
 ### 시스템 모니터링
-*   **통합 대시보드**: WPF 클라이언트를 통해 전체 공정의 흐름과 생산 실적을 시각적으로 모니터링할 수 있습니다.
+*   **통합 대시보드**: CIMON SCADA를 통해 전체 공정의 흐름과 생산 실적을 시각적으로 모니터링할 수 있습니다.
 *   **시스템 로그 추적**: Serilog를 도입하여 서버와 장비 간의 통신 로그 및 예외 상황을 기록, 시스템 안정성을 확보했습니다.
 
 ## 3. 시스템 아키텍처
@@ -123,6 +121,10 @@ graph TD
 - MySQL
 - Mitsubishi MX Component
 
+### 제약 사항
+
+이 프로젝트는 Mitsubishi PLC, 카메라, Dobot 로봇 하드웨어가 연결된 환경에서 전체 기능을 테스트할 수 있습니다.
+
 ### 설치 및 실행
 
 1.  리포지토리를 클론합니다.
@@ -130,19 +132,11 @@ graph TD
     git clone https://github.com/your-username/automotive-mes-server.git
     ```
 2.  Visual Studio에서 `MES.Server.sln` 파일을 엽니다.
-3.  `appsettings.json` 파일에 자신의 DB 연결 문자열 및 기타 설정을 입력합니다.
-    ```json
-    {
-      "ConnectionStrings": {
-        "DefaultConnection": "Server=localhost;Database=mes_db;Uid=root;Pwd=your_password;"
-      }
-    }
-    ```
-4.  솔루션을 빌드하고, `F5` 키를 눌러 프로젝트를 실행합니다.
+3.  솔루션을 빌드하고, `F5` 키를 눌러 프로젝트를 실행합니다.
 
 ## 6. 데이터베이스
 
-기본적으로 모든 컬럼은 `NOT NULL` 제약조건을 가지며, 예외적으로 생산 종료 시점이 나중에 결정되는 `production` 및 `production_history` 테이블의 `end_date` 컬럼만 `NULL`을 허용합니다.
+모든 컬럼은 `NOT NULL`이며, 예외적으로 생산 종료 시점이 나중에 결정되는 `end_date` 컬럼만 `NULL`을 허용합니다.
 
 ### 테이블 이원화 전략 (Dual-Table Strategy)
 
@@ -173,18 +167,6 @@ graph TD
 | `order_date` | 주문 날짜 | `DATETIME` | |
 | `order_status` | 주문 상태 | `VARCHAR(50)` | |
 
-### `order_history` (주문 관리) [백업]
-
-| 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
-|---|---|---|---|
-| `backup_id` | 백업 ID | `INT(11)` | `PRIMARY KEY` & `AUTO_INCREMENT` |
-| `order_id` | 주문 ID | `INT(11)` | |
-| `model_code` | 모델명 | `VARCHAR(50)` | |
-| `order_quantity`| 주문 수량 | `INT(11)` | |
-| `order_date` | 주문 날짜 | `DATETIME` | |
-| `order_status` | 주문 상태 | `VARCHAR(50)` | |
-| `backed_date` | 백업 날짜 | `DATETIME` | |
-
 ### `production` (생산 관리)
 
 | 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
@@ -197,6 +179,23 @@ graph TD
 | `bad_quantity` | 불량 수량 | `INT(11)` | |
 | `start_date` | 생산 시작 날짜 | `DATETIME` | |
 | `end_date` | 생산 종료 날짜 | `DATETIME` | `NULL 허용` |
+
+<br>
+<details>
+<summary><strong>📂 그 외 테이블 정보 보기 (History 및 Vision DB)</strong></summary>
+<br>
+
+### `order_history` (주문 관리) [백업]
+
+| 컬럼명 | 설명 | 데이터 타입 | 제약조건 |
+|---|---|---|---|
+| `backup_id` | 백업 ID | `INT(11)` | `PRIMARY KEY` & `AUTO_INCREMENT` |
+| `order_id` | 주문 ID | `INT(11)` | |
+| `model_code` | 모델명 | `VARCHAR(50)` | |
+| `order_quantity`| 주문 수량 | `INT(11)` | |
+| `order_date` | 주문 날짜 | `DATETIME` | |
+| `order_status` | 주문 상태 | `VARCHAR(50)` | |
+| `backup_date` | 백업 날짜 | `DATETIME` | |
 
 ### `production_history` (생산 관리) [백업]
 
@@ -211,7 +210,7 @@ graph TD
 | `bad_quantity` | 불량 수량 | `INT(11)` | |
 | `start_date` | 생산 시작 날짜 | `DATETIME` | |
 | `end_date` | 생산 종료 날짜 | `DATETIME` | `NULL 허용` |
-| `backed_date` | 백업 날짜 | `DATETIME` | |
+| `backup_date` | 백업 날짜 | `DATETIME` | |
 
 ### `vision_upper` (상부 비전 카메라)
 
@@ -233,7 +232,13 @@ graph TD
 | `result` | 결과 | `VARCHAR(50)` | |
 | `measured_at` | 측정 시각 | `DATETIME` | |
 
+</details>
+
 ## 7. PLC 입출력 맵
+
+<details>
+<summary><strong>📂 입출력(X/Y) 정보 보기</strong></summary>
+<br>
 
 ### 입력 (X)
 
@@ -273,6 +278,8 @@ graph TD
 | Y51 | 작업동작램프(초록색) |
 | Y52 | 수동동작램프(노랑색) |
 | Y53 | 비상정지램프(빨간색) |
+
+</details>
 
 ## 8. 프로젝트 팀 구성 및 역할
 
