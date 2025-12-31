@@ -16,6 +16,10 @@ C# ASP.NET Core와 Mitsubishi PLC를 활용한 자동차 제조 전공정(Front-
   - [3. 시스템 아키텍처](#3-시스템-아키텍처)
     - [주요 구성 요소](#주요-구성-요소)
   - [4. 기술 스택](#4-기술-스택)
+    - [Backend](#backend)
+    - [Database](#database)
+    - [PLC Communication](#plc-communication)
+    - [IDE](#ide)
     - [주요 NuGet 패키지](#주요-nuget-패키지)
   - [5. 시작하기](#5-시작하기)
     - [사전 요구사항](#사전-요구사항)
@@ -39,9 +43,9 @@ C# ASP.NET Core와 Mitsubishi PLC를 활용한 자동차 제조 전공정(Front-
 
 ## 1. 프로젝트 소개
 
-본 프로젝트는 자동차 차체(Body) 조립을 위한 **스마트 팩토리 전공정(Front-End Process) 관리 MES 시스템**입니다.
+본 프로젝트는 자동차 차체(Body) 조립을 위한 **스마트 팩토리 전공정(Front-End) 관리 MES 시스템**입니다.
 
-**ASP.NET 기반의 서버**를 주축으로, 설비(PLC), 로봇(Dobot), 비전, 그리고 관리자(WPF Client)를 유기적으로 연결하였습니다.
+**ASP.NET 기반의 서버**를 주축으로, 설비(PLC), 비전(Vision), 로봇(Dobot)을 유기적으로 연결하였습니다.
 단순히 설비를 제어하는 것을 넘어, 생산 주문(Order) 생성부터 로봇 조립, 비전 검사를 통한 품질 판정까지
 **제조 공정의 전체 라이프사이클을 자동화하고 데이터를 시각화**하는 데 중점을 두었습니다.
 
@@ -55,8 +59,8 @@ C# ASP.NET Core와 Mitsubishi PLC를 활용한 자동차 제조 전공정(Front-
 *   **Dobot 로봇 연계**: Dobot 로봇을 통해 자동차 조립 공정과 도색 작업을 수행합니다.
 
 ### 생산 관리 및 품질 분석
-*   **생산 오더 관리 (MOM)**: MySQL 데이터베이스를 기반으로 작업 지시를 생성하고, 공정 상황을 추적 관리합니다.
-*   **비전 기반 품질 관리 (QA)**: 비전 카메라가 판독한 양품/불량 데이터를 수신하여 DB에 저장하고, 불량 발생 시 즉각적인 알람 및 리젝트(Reject) 로직을 수행합니다.
+*   **생산 오더 관리**: MySQL 데이터베이스를 기반으로 작업 지시를 생성하고, 공정 상황을 추적 관리합니다.
+*   **품질 관리**: 비전 카메라가 판독한 양품/불량 데이터를 수신하여 DB에 저장하고, 불량 발생 시 즉각적인 알람 및 리젝트(Reject) 로직을 수행합니다.
 
 ### 시스템 모니터링
 *   **통합 대시보드**: WPF 클라이언트를 통해 전체 공정의 흐름과 생산 실적을 시각적으로 모니터링할 수 있습니다.
@@ -70,15 +74,14 @@ C# ASP.NET Core와 Mitsubishi PLC를 활용한 자동차 제조 전공정(Front-
 
 ```mermaid
 graph TD
-    subgraph ClientPC["Client PC"]
-        WPF["WPF Client<br/>(Dashboard)"]
-        Vision["Vision Client<br/>(Camera Control)"]
-        Dobot["Dobot Client<br/>(Robot Control)"]
-    end
-
     subgraph ServerPC["Server PC"]
         Server["ASP.NET Core Server<br/>(Business Logic)"]
         DB[("MySQL Database")]
+    end
+
+    subgraph ClientPC["Client PC"]
+        Vision["Vision Client<br/>(Camera Control)"]
+        Dobot["Dobot Client<br/>(Robot Control)"]
     end
 
     subgraph FactoryDevice["Factory Device"]
@@ -86,13 +89,16 @@ graph TD
         PLC["Mitsubishi PLC"]
     end
 
-    WPF <-->|"TCP/IP"| Server
-    Vision -->|"TCP/IP (Data Only)"| Server
-    
+    %% [Layout Trick] 강제 수직 배치를 위한 투명 연결선
+    %% Server PC의 DB 밑에 Client PC의 Vision이 오도록 설정
+    DB ~~~ Vision
+
+    %% Server Connections
     Server <-->|"Query/Save"| DB
     Server <-->|"PlcConnector"| MX
     MX <-->|"PLC Communication"| PLC
     
+    %% Client to PLC Direct Connections
     Dobot <-->|"pymcprotocol"| PLC
     Vision <-->|"pymcprotocol"| PLC
 ```
@@ -105,21 +111,24 @@ graph TD
         *   **Vision Client**: PLC로부터 검사 시작 신호를 직접 읽어(Read) 촬영을 진행하며, 도색 판정 결과를 PLC 메모리에 기록(Write)합니다.
         *   **Dobot Client**: PLC로부터 작업 신호를 수신하여 로봇 동작을 수행하고, 완료 신호를 전송합니다.
 
-2.  **서버-클라이언트 통신 (TCP/IP)**
-    *   **Vision Client**: 도색 판정 결과를 서버로 전송합니다. 이 과정은 데이터 로깅을 위한 단방향 통신으로, **서버로부터 별도의 응답(Response)을 기다리지 않고** 데이터를 전송합니다.
-    *   **WPF Client**: 작업자를 위한 대시보드로, 생산 현황 모니터링 및 공정 관리 기능을 제공하기 위해 서버와 양방향 통신합니다.
-
-3.  **데이터 관리 및 로깅**
+2.  **데이터 관리 및 로깅**
     *   **OrderService**: 수집된 데이터를 비즈니스 로직에 맞춰 가공합니다.
     *   **MySQL**: 생산 이력, 불량, 주문 정보 등 모든 데이터를 저장하고 관리합니다.
     *   **Serilog**: 서버의 운영 상태 및 예외 상황을 체계적으로 로깅하여 유지보수 효율을 높입니다.
 
 ## 4. 기술 스택
 
-- **Backend**: C# (ASP.NET Core 8.0)
-- **Database**: MySQL
-- **PLC Communication**: Mitsubishi MX Component
-- **IDE**: Visual Studio
+### Backend
+![C#](https://img.shields.io/badge/c%23-%23239120.svg?style=for-the-badge&logo=c-sharp&logoColor=white) ![.Net](https://img.shields.io/badge/.NET%20Core%208.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)
+
+### Database
+![MySQL](https://img.shields.io/badge/mysql-4479A1.svg?style=for-the-badge&logo=mysql&logoColor=white)
+
+### PLC Communication
+![Mitsubishi](https://img.shields.io/badge/Mitsubishi_MX_Component-DC002E?style=for-the-badge&logo=mitsubishi-electric&logoColor=white)
+
+### IDE
+![Visual Studio](https://img.shields.io/badge/Visual%20Studio-5C2D91.svg?style=for-the-badge&logo=visual-studio&logoColor=white) ![Visual Studio Code](https://img.shields.io/badge/Visual%20Studio%20Code-0078d7.svg?style=for-the-badge&logo=visual-studio-code&logoColor=white)
 
 ### 주요 NuGet 패키지
 | 패키지명 | 버전 | 설명 |
@@ -135,7 +144,7 @@ graph TD
 ### 사전 요구사항
 
 - .NET 8.0 SDK
-- Visual Studio
+- Visual Studio / Visual Studio Code
 - MySQL
 - Mitsubishi MX Component
 
@@ -164,6 +173,8 @@ graph TD
 
 본 프로젝트는 데이터 무결성과 성능 최적화를 위해 **이원화된 테이블 구조**를 채택했습니다.
 이러한 설계는 **CIMON SCADA 시스템의 태그(Tag) 구조적 한계**를 극복하고 성능을 최적화하기 위해 도입되었습니다. SCADA는 미리 생성된 정적 태그를 사용하므로, 데이터가 계속 누적되는 테이블을 직접 연동할 경우 성능 저하가 발생할 수 있습니다.
+
+![MySQL DB 구조](https://github.com/user-attachments/assets/14e17b16-29ba-4691-9b7d-91c02ca76d71)
 
 *   **운영 테이블 (Active DB)**: `order`, `production`
     *   현재 진행 중인 최신 데이터(최대 30건)만 유지합니다.
@@ -291,11 +302,11 @@ graph TD
 
 | 이름 | 포지션 | 담당 업무 |
 | :--- | :--- | :--- |
-| **최윤호** | **MES Server & PLC & HMI & SCADA** | **ASP.NET 서버 구축, PLC 제어, 시스템 통합 (본인)** |
-| 강선혁 | Team Leader | PM, SolidWorks 기구 설계, 3D 프린팅 및 설비 조립 |
-| 김현아 | Client & Robot | Python(Dobot, Vision) 제어, WPF 대시보드 클라이언트 개발 |
-| 신우재 | HW Support | Dobot 티칭, 하드웨어 조립 및 트러블 슈팅 |
-| 최승규 | Electrical Design | EPLAN 전기 도면 설계 |
+| **최윤호** | **OT/IT System Integration** | **MES 서버 구축, PLC 제어, HMI 작화, DB 설계, SCADA 구현** |
+| 강선혁 | Team Leader | SolidWorks 기구 설계/모델링, 3D 프린팅 및 설비 조립 |
+| 김현아 | Robot & Vision Control | 다관절 로봇(Dobot) 제어, 비전 카메라 제어, DB 기획 |
+| 신우재 | HW Support | Dobot 로봇 티칭, 하드웨어 조립 및 트러블 슈팅 |
+| 최승규 | Electrical Design | EPLAN 전기 도면 설계, 3D 모델링 보조, 아이디어 제안 |
 
 ### 나의 프로젝트 기여도
 
@@ -307,10 +318,10 @@ graph TD
     *   전체 시스템 아키텍처 설계 및 데이터베이스(MySQL) 모델링
 *   **PLC 제어 및 시스템 연동**
     *   Mitsubishi PLC 래더 로직 작성 및 공정 제어
-    *   MX Component를 활용한 `PLC <--> Server` 간 미들웨어 구현
+    *   MX Component를 활용한 `PLC <--> Server` 간 양방향 통신 미들웨어 구현
 *   **HMI / SCADA 구축**
     *   M2I HMI 작화 및 현장 제어 패널 구성
-    *   CIMON SCADA를 활용한 공정 모니터링 시스템 구축
+    *   CIMON SCADA를 활용한 실시간 공정 모니터링 시스템 구축
 
 ### 개발 회고록 (Dev Log)
 
@@ -323,3 +334,5 @@ graph TD
 *   [MES 구축 프로젝트 5주차: DB 구축과 설비의 완성](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A925%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-5%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D)
 *   [MES 구축 프로젝트 6주차: 설비 로직 작성과 코드 품질 개선](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A926%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-6%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D)
 *   [MES 구축 프로젝트 7주차: SCADA 관제 구현과 트러블 슈팅](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A927%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-7%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D)
+*   [MES 구축 프로젝트 8주차: 위기 속에서 배운 협업의 가치](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A928%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8-8%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D)
+*   [MES 구축 프로젝트 9주차: 살아있는 전기차 공장 완성(Final)](https://velog.io/@yunho21/%EB%A1%9C%EB%B4%87%ED%99%9C%EC%9A%A929%EC%A3%BC%EC%B0%A8-MES-%EA%B5%AC%EC%B6%95-%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8-9%EC%A3%BC%EC%B0%A8-%ED%9A%8C%EA%B3%A0%EB%A1%9D-wbiboemz)
